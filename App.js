@@ -171,7 +171,7 @@ export default function App() {
         setCardRangeInput('');
         setShowAddModal(false);
       } else {
-        Alert.alert('Invalid Range', 'Please enter a valid range (1-1000)');
+        Alert.alert('Invalid Range', 'Please enter a valid range (1-2000)');
       }
     } else {
       const cardNum = parseInt(input);
