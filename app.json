@@ -33,7 +33,9 @@
       },
       "statusBar": {
         "hidden": true
-      }
+      },
+      "enableProguardInReleaseBuilds": true,
+      "enableShrinkResourcesInReleaseBuilds": true
     },
     "web": {
       "favicon": "./assets/app-icon.png",
