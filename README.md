@@ -53,4 +53,4 @@ Win by completing:
 - Any vertical column  
 - Either diagonal line
 
-The FREE space in the center is automatically marked and counts toward winning patterns.
+The FREE space in the center is automatically marked and counts toward winning patterns.# fidel-bingo 
