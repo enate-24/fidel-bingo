@@ -1,0 +1,45 @@
+{
+  "expo": {
+    "name": "Cartela Viewer",
+    "slug": "cartela-viewer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#8B4CB8"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourname.cartelaviewer",
+      "statusBar": {
+        "hidden": true
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#8B4CB8"
+      },
+      "package": "com.yourname.cartelaviewer",
+      "versionCode": 1,
+      "navigationBar": {
+        "visible": false
+      },
+      "statusBar": {
+        "hidden": true
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "platforms": ["ios", "android", "web"],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id-here"
+      }
+    }
+  }
+}
