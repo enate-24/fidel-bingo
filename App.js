@@ -10,15 +10,17 @@ import {
   Dimensions,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bingoCards } from './cartela';
 
 const { width, height } = Dimensions.get('window');
 
 export default function App() {
-  const [displayedCards, setDisplayedCards] = useState([1, 2, 3]);
+  const [displayedCards, setDisplayedCards] = useState([]);
   const [markedNumbers, setMarkedNumbers] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [cardRangeInput, setCardRangeInput] = useState('');
@@ -38,7 +40,58 @@ export default function App() {
       }
     };
     setupFullScreen();
+    
+    // Load saved data on app start
+    loadSavedData();
   }, []);
+
+  // Save data to AsyncStorage
+  const saveData = async (cards, marked) => {
+    try {
+      const dataToSave = {
+        displayedCards: cards,
+        markedNumbers: marked
+      };
+      await AsyncStorage.setItem('bingoData', JSON.stringify(dataToSave));
+    } catch (error) {
+      console.log('Error saving data:', error);
+    }
+  };
+
+  // Load data from AsyncStorage
+  const loadSavedData = async () => {
+    try {
+      const savedData = await AsyncStorage.getItem('bingoData');
+      if (savedData) {
+        const parsedData = JSON.parse(savedData);
+        if (parsedData.displayedCards && parsedData.displayedCards.length > 0) {
+          setDisplayedCards(parsedData.displayedCards);
+        }
+        if (parsedData.markedNumbers) {
+          // Convert arrays back to Sets
+          const convertedMarked = {};
+          Object.keys(parsedData.markedNumbers).forEach(cardId => {
+            convertedMarked[cardId] = new Set(parsedData.markedNumbers[cardId]);
+          });
+          setMarkedNumbers(convertedMarked);
+        }
+      }
+    } catch (error) {
+      console.log('Error loading data:', error);
+    }
+  };
+
+  // Save data whenever displayedCards or markedNumbers change
+  useEffect(() => {
+    if (displayedCards.length > 0 || Object.keys(markedNumbers).length > 0) {
+      // Convert Sets to arrays for storage
+      const markedForStorage = {};
+      Object.keys(markedNumbers).forEach(cardId => {
+        markedForStorage[cardId] = Array.from(markedNumbers[cardId]);
+      });
+      saveData(displayedCards, markedForStorage);
+    }
+  }, [displayedCards, markedNumbers]);
 
   const markNumber = (cardId, number) => {
     setMarkedNumbers(prev => {
@@ -104,10 +157,10 @@ export default function App() {
     const input = cardRangeInput.trim();
     if (!input) return;
 
-    // Parse input like "1-2600" or single numbers
+    // Parse input like "1-2000" or single numbers
     if (input.includes('-')) {
       const [start, end] = input.split('-').map(num => parseInt(num.trim()));
-      if (start >= 1 && end <= 1000 && start <= end) {
+      if (start >= 1 && end <= 2000 && start <= end) {
         const newCards = [];
         for (let i = start; i <= Math.min(end, start + 50); i++) { // Limit to 50 cards max
           if (!displayedCards.includes(i)) {
@@ -118,18 +171,18 @@ export default function App() {
         setCardRangeInput('');
         setShowAddModal(false);
       } else {
-        Alert.alert('Invalid Range', 'Please enter a valid range (1-1000)');
+        Alert.alert('Invalid Range', 'Please enter a valid range (1-2000)');
       }
     } else {
       const cardNum = parseInt(input);
-      if (cardNum >= 1 && cardNum <= 1000) {
+      if (cardNum >= 1 && cardNum <= 2000) {
         if (!displayedCards.includes(cardNum)) {
           setDisplayedCards(prev => [...prev, cardNum]);
         }
         setCardRangeInput('');
         setShowAddModal(false);
       } else {
-        Alert.alert('Invalid Number', 'Please enter a card number between 1 and 1000');
+        Alert.alert('Invalid Number', 'Please enter a card number between 1 and 2000');
       }
     }
   };
@@ -143,61 +196,9 @@ export default function App() {
     });
   };
 
-  const checkBingo = (cardId) => {
-    const currentCard = bingoCards[cardId];
-    const cardMarked = markedNumbers[cardId] || new Set();
-    
-    if (!currentCard) return false;
-    
-    // Check rows
-    for (let row = 0; row < 5; row++) {
-      let rowComplete = true;
-      for (let col = 0; col < 5; col++) {
-        const cell = currentCard[row][col];
-        if (cell !== 'FREE' && cell !== 'Free' && !cardMarked.has(cell)) {
-          rowComplete = false;
-          break;
-        }
-      }
-      if (rowComplete) return true;
-    }
-    
-    // Check columns
-    for (let col = 0; col < 5; col++) {
-      let colComplete = true;
-      for (let row = 0; row < 5; row++) {
-        const cell = currentCard[row][col];
-        if (cell !== 'FREE' && cell !== 'Free' && !cardMarked.has(cell)) {
-          colComplete = false;
-          break;
-        }
-      }
-      if (colComplete) return true;
-    }
-    
-    // Check diagonals
-    let diag1Complete = true;
-    let diag2Complete = true;
-    
-    for (let i = 0; i < 5; i++) {
-      const cell1 = currentCard[i][i];
-      const cell2 = currentCard[i][4 - i];
-      
-      if (cell1 !== 'FREE' && cell1 !== 'Free' && !cardMarked.has(cell1)) {
-        diag1Complete = false;
-      }
-      if (cell2 !== 'FREE' && cell2 !== 'Free' && !cardMarked.has(cell2)) {
-        diag2Complete = false;
-      }
-    }
-    
-    return diag1Complete || diag2Complete;
-  };
-
   const renderBingoCard = (cardId) => {
     const currentCard = bingoCards[cardId];
     const cardMarked = markedNumbers[cardId] || new Set();
-    const hasBingo = checkBingo(cardId);
     
     if (!currentCard) return null;
 
@@ -212,7 +213,7 @@ export default function App() {
         { width: cardWidth },
         isFullWidth && styles.fullWidthCard
       ]}>
-        <View style={[styles.cardHeader, hasBingo && styles.bingoCardHeader]}>
+        <View style={styles.cardHeader}>
           <Text style={styles.cardNumber}>No- {cardId}</Text>
           <TouchableOpacity 
             style={styles.removeButton}
@@ -273,7 +274,12 @@ export default function App() {
       <StatusBar hidden={true} />
       
       <View style={styles.header}>
-        <Text style={styles.title}>Fidel Bingo</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>FB</Text>
+          </View>
+          <Text style={styles.title}>Fidel Bingo</Text>
+        </View>
         <TouchableOpacity 
           style={styles.menuButton}
           onPress={() => setShowMenu(true)}
@@ -290,31 +296,31 @@ export default function App() {
             </Text>
           </View>
         )}
-        <View style={[
-          styles.cardsGrid,
-          displayedCards.length === 1 && styles.singleCardGrid
-        ]}>
-          {displayedCards.map((cardId) => {
-            const hasBingo = checkBingo(cardId);
-            return (
-              <View
-                key={cardId}
-                style={[
-                  styles.cardWrapper, 
-                  hasBingo && styles.bingoCardWrapper,
-                  displayedCards.length === 1 && styles.singleCardWrapper
-                ]}
-              >
-                {renderBingoCard(cardId)}
-                {hasBingo && (
-                  <View style={styles.bingoIndicator}>
-                    <Text style={styles.bingoIndicatorText}>BINGO!</Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
+        {displayedCards.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>No cards added yet</Text>
+            <Text style={styles.emptyStateSubtext}>Tap the + button to add your first card</Text>
+          </View>
+        ) : (
+          <View style={[
+            styles.cardsGrid,
+            displayedCards.length === 1 && styles.singleCardGrid
+          ]}>
+            {displayedCards.map((cardId) => {
+              return (
+                <View
+                  key={cardId}
+                  style={[
+                    styles.cardWrapper,
+                    displayedCards.length === 1 && styles.singleCardWrapper
+                  ]}
+                >
+                  {renderBingoCard(cardId)}
+                </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       <TouchableOpacity
@@ -338,9 +344,14 @@ export default function App() {
           <View style={styles.menuContent}>
             <TouchableOpacity
               style={[styles.menuItem, styles.lastMenuItem]}
-              onPress={() => {
-                // Clear all marked numbers
+              onPress={async () => {
+                // Clear all marked numbers and saved data
                 setMarkedNumbers({});
+                try {
+                  await AsyncStorage.removeItem('bingoData');
+                } catch (error) {
+                  console.log('Error clearing saved data:', error);
+                }
                 setShowMenu(false);
               }}
             >
@@ -361,7 +372,7 @@ export default function App() {
           <View style={styles.modalContent}>
             <TextInput
               style={styles.modalInput}
-              placeholder="Cartela 1 - 2600"
+              placeholder="Cartela 1 - 2000"
               value={cardRangeInput}
               onChangeText={setCardRangeInput}
               keyboardType="numeric"
@@ -405,6 +416,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  logoContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFD700',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  logoText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#000',
+  },
   title: {
     fontSize: 20,
     fontWeight: 'bold',
@@ -421,6 +451,26 @@ const styles = StyleSheet.create({
   cardsContainer: {
     flex: 1,
     padding: 0,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingVertical: 100,
+  },
+  emptyStateText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#7f8c8d',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  emptyStateSubtext: {
+    fontSize: 16,
+    color: '#95a5a6',
+    textAlign: 'center',
+    lineHeight: 24,
   },
   modeIndicator: {
     backgroundColor: '#3498db',
@@ -454,31 +504,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     margin: 0,
   },
-  bingoCardWrapper: {
-    shadowColor: '#e74c3c',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 6,
-    elevation: 8,
-  },
-  bingoIndicator: {
-    position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: '#e74c3c',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-    transform: [{ rotate: '15deg' }],
-  },
-  bingoIndicatorText: {
-    color: 'white',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
   bingoCard: {
     backgroundColor: 'white',
     borderRadius: 10,
@@ -504,9 +529,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  bingoCardHeader: {
-    backgroundColor: '#e74c3c',
   },
   cardNumber: {
     color: 'white',

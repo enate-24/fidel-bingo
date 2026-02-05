@@ -1,29 +1,29 @@
 {
   "expo": {
-    "name": "Cartela Viewer",
+    "name": "Fidel Bingo",
     "slug": "cartela-viewer",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#8B4CB8"
+      "backgroundColor": "#000000"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourname.cartelaviewer",
+      "bundleIdentifier": "com.fidelbingo.app",
       "statusBar": {
         "hidden": true
       }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#8B4CB8"
+        "backgroundColor": "#000000"
       },
-      "package": "com.yourname.cartelaviewer",
+      "package": "com.fidelbingo.app",
       "versionCode": 1,
       "navigationBar": {
         "visible": false
@@ -35,10 +35,14 @@
     "web": {
       "bundler": "metro"
     },
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "extra": {
       "eas": {
-        "projectId": "your-project-id-here"
+        "projectId": "d65fe08e-ec87-4269-acca-325de847c5d8"
       }
     }
   }
