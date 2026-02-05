@@ -107,7 +107,7 @@ export default function App() {
     // Parse input like "1-2600" or single numbers
     if (input.includes('-')) {
       const [start, end] = input.split('-').map(num => parseInt(num.trim()));
-      if (start >= 1 && end <= 1000 && start <= end) {
+      if (start >= 1 && end <= 2000 && start <= end) {
         const newCards = [];
         for (let i = start; i <= Math.min(end, start + 50); i++) { // Limit to 50 cards max
           if (!displayedCards.includes(i)) {
@@ -118,11 +118,11 @@ export default function App() {
         setCardRangeInput('');
         setShowAddModal(false);
       } else {
-        Alert.alert('Invalid Range', 'Please enter a valid range (1-1000)');
+t        Alert.alert('Invalid Range', 'Please enter a valid range (1-2000)');
       }
     } else {
       const cardNum = parseInt(input);
-      if (cardNum >= 1 && cardNum <= 1000) {
+      if (cardNum >= 1 && cardNum <= 2000) {
         if (!displayedCards.includes(cardNum)) {
           setDisplayedCards(prev => [...prev, cardNum]);
         }
@@ -361,7 +361,7 @@ export default function App() {
           <View style={styles.modalContent}>
             <TextInput
               style={styles.modalInput}
-              placeholder="Cartela 1 - 2600"
+              placeholder="Cartela 1 - 2000"
               value={cardRangeInput}
               onChangeText={setCardRangeInput}
               keyboardType="numeric"
