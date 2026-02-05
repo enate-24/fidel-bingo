@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   StyleSheet,
   View,
@@ -9,8 +9,8 @@ import {
   Alert,
   Dimensions,
   Modal,
-  FlatList,
-  Image,
+  Vibration,
+  Pressable,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as NavigationBar from 'expo-navigation-bar';
@@ -24,8 +24,6 @@ export default function App() {
   const [markedNumbers, setMarkedNumbers] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [cardRangeInput, setCardRangeInput] = useState('');
-  const [calledNumbers, setCalledNumbers] = useState([]);
-  const [multiMarkMode, setMultiMarkMode] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
@@ -94,6 +92,7 @@ export default function App() {
   }, [displayedCards, markedNumbers]);
 
   const markNumber = (cardId, number) => {
+    Vibration.vibrate(10); // Quick haptic feedback
     setMarkedNumbers(prev => {
       const cardMarked = prev[cardId] || new Set();
       const newCardMarked = new Set(cardMarked);
@@ -140,17 +139,6 @@ export default function App() {
       
       return newMarked;
     });
-  };
-
-  const handleMarkAll = () => {
-    const number = parseInt(markAllNumber.trim());
-    if (number >= 1 && number <= 75) {
-      markNumberOnAllCards(number);
-      setMarkAllNumber('');
-      setShowMarkAllModal(false);
-    } else {
-      Alert.alert('Invalid Number', 'Please enter a number between 1 and 75');
-    }
   };
 
   const addCardRange = () => {
@@ -238,19 +226,22 @@ export default function App() {
               const isFreeSpace = cell === 'FREE' || cell === 'Free';
               
               return (
-                <TouchableOpacity
+                <Pressable
                   key={`${rowIndex}-${colIndex}`}
-                  style={[
+                  style={({ pressed }) => [
                     styles.cell,
                     { width: cellSize, height: cellSize },
                     isMarked && styles.markedCell,
                     isFreeSpace && styles.freeCell,
+                    pressed && { opacity: 0.6 },
                   ]}
-                  onPress={() => {
+                  onPressIn={() => {
                     if (!isFreeSpace) {
                       markNumber(cardId, cell);
                     }
                   }}
+                  delayLongPress={0}
+                  android_disableSound={true}
                 >
                   <Text style={[
                     styles.cellText,
@@ -260,7 +251,7 @@ export default function App() {
                   ]}>
                     {isFreeSpace ? 'F' : cell}
                   </Text>
-                </TouchableOpacity>
+                </Pressable>
               );
             })}
           </View>
@@ -282,20 +273,13 @@ export default function App() {
         </View>
         <TouchableOpacity 
           style={styles.menuButton}
-          onPress={() => setShowMenu(true)}
+          onPressIn={() => setShowMenu(true)}
         >
           <Text style={styles.menuText}>⋮</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.cardsContainer} showsVerticalScrollIndicator={false}>
-        {multiMarkMode && (
-          <View style={styles.modeIndicator}>
-            <Text style={styles.modeIndicatorText}>
-              🎯 Multi-Mark Mode: Tap numbers directly on cards to mark them
-            </Text>
-          </View>
-        )}
         {displayedCards.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No cards added yet</Text>
@@ -339,25 +323,25 @@ export default function App() {
       >
         <TouchableOpacity 
           style={styles.menuOverlay}
+          activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View style={styles.menuContent}>
-            <TouchableOpacity
-              style={[styles.menuItem, styles.lastMenuItem]}
-              onPress={async () => {
-                // Clear all marked numbers and saved data
-                setMarkedNumbers({});
-                try {
-                  await AsyncStorage.removeItem('bingoData');
-                } catch (error) {
-                  console.log('Error clearing saved data:', error);
-                }
-                setShowMenu(false);
-              }}
-            >
-              <Text style={styles.menuItemText}>Clean</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity 
+            style={styles.cleanButtonMenu}
+            activeOpacity={0.7}
+            onPress={async () => {
+              // Clear all marked numbers and saved data
+              setMarkedNumbers({});
+              try {
+                await AsyncStorage.removeItem('bingoData');
+              } catch (error) {
+                console.log('Error clearing saved data:', error);
+              }
+              setShowMenu(false);
+            }}
+          >
+            <Text style={styles.cleanButtonMenuText}>Clean</Text>
+          </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
 
@@ -405,16 +389,21 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#e8e8e8',
+    backgroundColor: '#f5f7fa',
   },
   header: {
-    backgroundColor: '#000',
-    paddingTop: 20,
-    paddingBottom: 15,
+    backgroundColor: '#1a1a2e',
+    paddingTop: 15,
+    paddingBottom: 12,
     paddingHorizontal: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
   },
   headerContent: {
     flexDirection: 'row',
@@ -425,28 +414,37 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#FFD700',
+    backgroundColor: '#ff6b6b',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 10,
+    shadowColor: '#ff6b6b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
   },
   logoText: {
     fontSize: 14,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: 0.5,
   },
   title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 19,
+    fontWeight: '700',
+    color: '#ffffff',
+    letterSpacing: 0.5,
   },
   menuButton: {
-    padding: 5,
+    padding: 6,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   menuText: {
-    color: 'white',
+    color: '#ffffff',
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
   },
   cardsContainer: {
     flex: 1,
@@ -457,32 +455,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 40,
-    paddingVertical: 100,
+    paddingVertical: 120,
   },
   emptyStateText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#7f8c8d',
-    marginBottom: 10,
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#2d3436',
+    marginBottom: 12,
     textAlign: 'center',
   },
   emptyStateSubtext: {
-    fontSize: 16,
-    color: '#95a5a6',
+    fontSize: 17,
+    color: '#636e72',
     textAlign: 'center',
-    lineHeight: 24,
-  },
-  modeIndicator: {
-    backgroundColor: '#3498db',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-  },
-  modeIndicatorText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    lineHeight: 26,
   },
   cardsGrid: {
     flexDirection: 'row',
@@ -505,147 +491,174 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   bingoCard: {
-    backgroundColor: 'white',
-    borderRadius: 10,
-    padding: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 16,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 6,
   },
   fullWidthCard: {
     alignSelf: 'center',
   },
   cardHeader: {
-    backgroundColor: '#8B4CB8',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    marginBottom: 8,
+    backgroundColor: '#6c5ce7',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    marginBottom: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    shadowColor: '#6c5ce7',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   cardNumber: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 16,
+    letterSpacing: 0.5,
   },
   removeButton: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 14,
+    width: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },
   removeButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
   },
   bingoHeader: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: '#000',
-    paddingVertical: 4,
-    marginBottom: 2,
+    backgroundColor: '#1a1a2e',
+    paddingVertical: 8,
+    marginBottom: 4,
+    borderRadius: 8,
   },
   bingoHeaderText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#ffffff',
     textAlign: 'center',
+    letterSpacing: 1,
   },
   row: {
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
   cell: {
-    borderWidth: 1,
-    borderColor: '#bdc3c7',
+    borderWidth: 2,
+    borderColor: '#dfe6e9',
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 0.5,
-    backgroundColor: 'white',
+    margin: 1,
+    backgroundColor: '#ffffff',
+    borderRadius: 6,
   },
   markedCell: {
-    backgroundColor: '#e74c3c',
-    borderColor: '#c0392b',
+    backgroundColor: '#00b894',
+    borderColor: '#00a383',
   },
   freeCell: {
-    backgroundColor: '#e74c3c',
-    borderColor: '#c0392b',
+    backgroundColor: '#00b894',
+    borderColor: '#00a383',
   },
   cellText: {
-    fontWeight: 'bold',
-    color: '#000000',
+    fontWeight: '900',
+    color: '#2d3436',
   },
   markedCellText: {
-    color: 'white',
+    color: '#ffffff',
+    fontWeight: '900',
   },
   freeCellText: {
-    color: 'white',
-    fontSize: 10,
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '900',
   },
   addButton: {
     position: 'absolute',
     bottom: 30,
     right: 30,
-    backgroundColor: '#000',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    backgroundColor: '#1a1a2e',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowColor: '#1a1a2e',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   addButtonText: {
-    color: 'white',
-    fontSize: 30,
-    fontWeight: 'bold',
+    color: '#ffffff',
+    fontSize: 32,
+    fontWeight: '700',
   },
   menuOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'transparent',
     justifyContent: 'flex-start',
     alignItems: 'flex-end',
-    paddingTop: 100,
-    paddingRight: 20,
+    paddingTop: 10,
+    paddingRight: 50,
+    paddingLeft: 20,
+  },
+  cleanButtonMenu: {
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    backgroundColor: '#ff6b6b',
+    borderRadius: 8,
+    shadowColor: '#ff6b6b',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  cleanButtonMenuText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '700',
   },
   menuContent: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    minWidth: 180,
+    backgroundColor: 'rgba(59, 130, 246, 0.95)',
+    borderRadius: 12,
+    minWidth: 200,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 8,
+    padding: 20,
+  },
+  menuPlaceholder: {
+    fontSize: 15,
+    color: '#ffffff',
+    textAlign: 'center',
+    fontWeight: '600',
   },
   menuItem: {
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 24,
+    paddingVertical: 18,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: 'rgba(255,255,255,0.2)',
   },
   menuItemText: {
-    fontSize: 16,
-    color: '#2c3e50',
+    fontSize: 17,
+    color: '#ffffff',
+    fontWeight: '600',
   },
   lastMenuItem: {
     borderBottomWidth: 0,
@@ -654,55 +667,69 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   disabledMenuItemText: {
-    color: '#bdc3c7',
+    color: '#b2bec3',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 20,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 28,
     width: width - 80,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 10,
   },
   modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 18,
     textAlign: 'center',
-    color: '#2c3e50',
+    color: '#2d3436',
   },
   modalInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 16,
+    borderWidth: 2,
+    borderColor: '#dfe6e9',
+    borderRadius: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    fontSize: 17,
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 24,
     textAlign: 'center',
+    backgroundColor: '#f8f9fa',
+    fontWeight: '600',
+    color: '#2d3436',
   },
   modalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     width: '100%',
+    gap: 12,
   },
   modalButton: {
-    backgroundColor: '#000',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 80,
+    backgroundColor: '#1a1a2e',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 12,
+    flex: 1,
+    shadowColor: '#1a1a2e',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   modalButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#ffffff',
+    fontSize: 17,
+    fontWeight: '700',
     textAlign: 'center',
   },
 });
