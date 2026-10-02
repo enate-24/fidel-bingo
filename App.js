@@ -1,15 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
   Text,
   TouchableOpacity,
   TextInput,
-  ScrollView,
+  Modal,
   Alert,
   Dimensions,
-  Modal,
-  Vibration,
+  ScrollView,
   Pressable,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -17,239 +16,186 @@ import * as NavigationBar from 'expo-navigation-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { bingoCards } from './cartela';
 
-const { width, height } = Dimensions.get('window');
+const getScales = () => {
+  const { width, height } = Dimensions.get('window');
+  const isTablet = width >= 768;
+  const cols = isTablet ? 3 : 2;
+  const cardWidth = width / cols;
+  const cellSize = (cardWidth - 12) / 5;
+  const scale = width / 375;
+  return { width, height, isTablet, cols, cardWidth, cellSize, scale };
+};
 
 export default function App() {
+  const [dims, setDims] = useState(getScales());
+  const [showSplash, setShowSplash] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [cardInput, setCardInput] = useState('');
   const [displayedCards, setDisplayedCards] = useState([]);
   const [markedNumbers, setMarkedNumbers] = useState({});
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [cardRangeInput, setCardRangeInput] = useState('');
-  const [showMenu, setShowMenu] = useState(false);
 
   useEffect(() => {
-    // Hide navigation bar on Android for full screen
-    const setupFullScreen = async () => {
-      try {
-        if (NavigationBar.setVisibilityAsync) {
-          await NavigationBar.setVisibilityAsync('hidden');
-        }
-      } catch (error) {
-        console.log('Navigation bar control not available');
-      }
-    };
-    setupFullScreen();
-    
-    // Load saved data on app start
-    loadSavedData();
+    const sub = Dimensions.addEventListener('change', () => setDims(getScales()));
+    return () => sub?.remove();
   }, []);
 
-  // Save data to AsyncStorage
-  const saveData = async (cards, marked) => {
-    try {
-      const dataToSave = {
-        displayedCards: cards,
-        markedNumbers: marked
-      };
-      await AsyncStorage.setItem('bingoData', JSON.stringify(dataToSave));
-    } catch (error) {
-      console.log('Error saving data:', error);
-    }
-  };
-
-  // Load data from AsyncStorage
-  const loadSavedData = async () => {
-    try {
-      const savedData = await AsyncStorage.getItem('bingoData');
-      if (savedData) {
-        const parsedData = JSON.parse(savedData);
-        if (parsedData.displayedCards && parsedData.displayedCards.length > 0) {
-          setDisplayedCards(parsedData.displayedCards);
-        }
-        if (parsedData.markedNumbers) {
-          // Convert arrays back to Sets
-          const convertedMarked = {};
-          Object.keys(parsedData.markedNumbers).forEach(cardId => {
-            convertedMarked[cardId] = new Set(parsedData.markedNumbers[cardId]);
-          });
-          setMarkedNumbers(convertedMarked);
-        }
-      }
-    } catch (error) {
-      console.log('Error loading data:', error);
-    }
-  };
-
-  // Save data whenever displayedCards or markedNumbers change
   useEffect(() => {
-    if (displayedCards.length > 0 || Object.keys(markedNumbers).length > 0) {
-      // Convert Sets to arrays for storage
-      const markedForStorage = {};
-      Object.keys(markedNumbers).forEach(cardId => {
-        markedForStorage[cardId] = Array.from(markedNumbers[cardId]);
-      });
-      saveData(displayedCards, markedForStorage);
-    }
+    const setupFullScreen = async () => {
+      try {
+        if (NavigationBar.setVisibilityAsync) await NavigationBar.setVisibilityAsync('hidden');
+      } catch (e) {}
+    };
+    setupFullScreen();
+    const loadData = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('cartelaData');
+        if (saved) {
+          const { cards, marked } = JSON.parse(saved);
+          if (cards) setDisplayedCards(cards);
+          if (marked) {
+            const converted = {};
+            Object.keys(marked).forEach(k => { converted[k] = new Set(marked[k]); });
+            setMarkedNumbers(converted);
+          }
+        }
+      } catch (e) {}
+    };
+    loadData();
+  }, []);
+
+  // Save whenever cards or marked numbers change
+  useEffect(() => {
+    const saveData = async () => {
+      try {
+        const markedForStorage = {};
+        Object.keys(markedNumbers).forEach(k => {
+          markedForStorage[k] = Array.from(markedNumbers[k]);
+        });
+        await AsyncStorage.setItem('cartelaData', JSON.stringify({
+          cards: displayedCards,
+          marked: markedForStorage,
+        }));
+      } catch (e) {}
+    };
+    saveData();
   }, [displayedCards, markedNumbers]);
 
-  const markNumber = (cardId, number) => {
-    Vibration.vibrate(10); // Quick haptic feedback
-    setMarkedNumbers(prev => {
-      const cardMarked = prev[cardId] || new Set();
-      const newCardMarked = new Set(cardMarked);
-      
-      if (newCardMarked.has(number)) {
-        newCardMarked.delete(number);
-      } else {
-        newCardMarked.add(number);
-      }
-      
-      return {
-        ...prev,
-        [cardId]: newCardMarked
-      };
-    });
-  };
-
-  const markNumberOnAllCards = (number) => {
-    setMarkedNumbers(prev => {
-      const newMarked = { ...prev };
-      
-      displayedCards.forEach(cardId => {
-        const currentCard = bingoCards[cardId];
-        if (currentCard) {
-          // Check if this number exists in the card
-          const hasNumber = currentCard.some(row => 
-            row.some(cell => cell === number)
-          );
-          
-          if (hasNumber) {
-            const cardMarked = newMarked[cardId] || new Set();
-            const newCardMarked = new Set(cardMarked);
-            
-            if (newCardMarked.has(number)) {
-              newCardMarked.delete(number);
-            } else {
-              newCardMarked.add(number);
-            }
-            
-            newMarked[cardId] = newCardMarked;
-          }
-        }
-      });
-      
-      return newMarked;
-    });
-  };
-
-  const addCardRange = () => {
-    const input = cardRangeInput.trim();
+  const addCards = () => {
+    const input = cardInput.trim();
     if (!input) return;
-
-    // Parse input like "1-2000" or single numbers
+    let newIds = [];
     if (input.includes('-')) {
-      const [start, end] = input.split('-').map(num => parseInt(num.trim()));
-      if (start >= 1 && end <= 2000 && start <= end) {
-        const newCards = [];
-        for (let i = start; i <= Math.min(end, start + 50); i++) { // Limit to 50 cards max
-          if (!displayedCards.includes(i)) {
-            newCards.push(i);
-          }
-        }
-        setDisplayedCards(prev => [...prev, ...newCards]);
-        setCardRangeInput('');
-        setShowAddModal(false);
-      } else {
-        Alert.alert('Invalid Range', 'Please enter a valid range (1-2000)');
+      const [start, end] = input.split('-').map(n => parseInt(n.trim()));
+      if (isNaN(start) || isNaN(end) || start < 1 || end > 2000 || start > end) {
+        Alert.alert('Invalid Range', 'Range must be between 1 and 2000. Max cartela is 2000.');
+        return;
+      }
+      for (let i = start; i <= end; i++) {
+        if (!displayedCards.includes(i) && bingoCards[i]) newIds.push(i);
       }
     } else {
-      const cardNum = parseInt(input);
-      if (cardNum >= 1 && cardNum <= 2000) {
-        if (!displayedCards.includes(cardNum)) {
-          setDisplayedCards(prev => [...prev, cardNum]);
-        }
-        setCardRangeInput('');
-        setShowAddModal(false);
-      } else {
-        Alert.alert('Invalid Number', 'Please enter a card number between 1 and 2000');
+      const num = parseInt(input);
+      if (isNaN(num) || num < 1 || num > 2000) {
+        Alert.alert('Invalid Number', 'Cartela number must be between 1 and 2000.');
+        return;
       }
+      if (!displayedCards.includes(num) && bingoCards[num]) newIds.push(num);
     }
+    if (newIds.length === 0) {
+      Alert.alert('Not Found', 'No new valid cartela found');
+      return;
+    }
+    setDisplayedCards(prev => [...prev, ...newIds]);
+    setCardInput('');
+    setShowAddModal(false);
+  };
+
+  const toggleNumber = (cardId, value) => {
+    setMarkedNumbers(prev => {
+      const newMarked = { ...prev };
+      // Mark/unmark on the tapped card first to determine action
+      const tappedSet = new Set(prev[cardId] || []);
+      const isAdding = !tappedSet.has(value);
+
+      // Apply to all displayed cards that contain this number
+      displayedCards.forEach(id => {
+        const card = bingoCards[id];
+        if (!card) return;
+        const hasNumber = card.some(row => row.some(cell => {
+          const v = typeof cell === 'string' ? parseInt(cell) : cell;
+          return v === value;
+        }));
+        if (hasNumber) {
+          const s = new Set(prev[id] || []);
+          isAdding ? s.add(value) : s.delete(value);
+          newMarked[id] = s;
+        }
+      });
+
+      return newMarked;
+    });
   };
 
   const removeCard = (cardId) => {
-    setDisplayedCards(prev => prev.filter(id => id !== cardId));
-    setMarkedNumbers(prev => {
-      const newMarked = { ...prev };
-      delete newMarked[cardId];
-      return newMarked;
-    });
+    Alert.alert(
+      'Delete Cartela',
+      `Remove cartela No-${cardId}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes', style: 'destructive',
+          onPress: () => {
+            setDisplayedCards(prev => prev.filter(id => id !== cardId));
+            setMarkedNumbers(prev => { const n = { ...prev }; delete n[cardId]; return n; });
+          }
+        }
+      ]
+    );
   };
 
-  const renderBingoCard = (cardId) => {
-    const currentCard = bingoCards[cardId];
-    const cardMarked = markedNumbers[cardId] || new Set();
-    
-    if (!currentCard) return null;
-
-    // Dynamic width based on number of cards
+  const renderCard = useCallback((cardId) => {
+    const card = bingoCards[cardId];
+    if (!card) return null;
+    const marked = markedNumbers[cardId] || new Set();
+    const { cardWidth, cellSize, scale } = dims;
     const isFullWidth = displayedCards.length === 1;
-    const cardWidth = isFullWidth ? width - 4 : (width - 6) / 2;
-    const cellSize = (cardWidth - 20) / 5;
+    const cols = dims.isTablet ? 3 : 2;
+    const gap = 1.5;
+    const cw = isFullWidth ? dims.width : (dims.width - gap * (cols - 1)) / cols;
+    const cs = (cw - 12) / 5;
+    const numFontSize = Math.max(10, Math.min(cs * 0.45, 20)) * 1.15;
+    const headerFontSize = Math.max(10, Math.min(cs * 0.42, 16));
 
     return (
-      <View style={[
-        styles.bingoCard, 
-        { width: cardWidth },
-        isFullWidth && styles.fullWidthCard
-      ]}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardNumber}>No- {cardId}</Text>
-          <TouchableOpacity 
-            style={styles.removeButton}
-            onPress={() => removeCard(cardId)}
-          >
-            <Text style={styles.removeButtonText}>×</Text>
+      <View key={cardId} style={[styles.card, { width: cw }]}>
+        <View style={[styles.cardHeader, { paddingVertical: Math.max(3, scale * 4) }]}>
+          <Text style={[styles.cardNumber, { fontSize: Math.max(11, scale * 13) * 1.20 }]}>{cardId}</Text>
+          <TouchableOpacity onPress={() => removeCard(cardId)} style={styles.removeBtn}>
+            <Text style={styles.removeBtnText}>🗑</Text>
           </TouchableOpacity>
         </View>
-        
-        <View style={styles.bingoHeader}>
-          <Text style={[styles.bingoHeaderText, { width: cellSize }]}>B</Text>
-          <Text style={[styles.bingoHeaderText, { width: cellSize }]}>I</Text>
-          <Text style={[styles.bingoHeaderText, { width: cellSize }]}>N</Text>
-          <Text style={[styles.bingoHeaderText, { width: cellSize }]}>G</Text>
-          <Text style={[styles.bingoHeaderText, { width: cellSize }]}>O</Text>
+
+        <View style={styles.bingoRow}>
+          {['B','I','N','G','O'].map(l => (
+            <Text key={l} style={[styles.bingoLetter, { width: cs, fontSize: headerFontSize }]}>{l}</Text>
+          ))}
         </View>
-        
-        {currentCard.map((row, rowIndex) => (
-          <View key={rowIndex} style={styles.row}>
-            {row.map((cell, colIndex) => {
-              const isMarked = cardMarked.has(cell) || cell === 'FREE' || cell === 'Free';
-              const isFreeSpace = cell === 'FREE' || cell === 'Free';
-              
+
+        {card.map((row, ri) => (
+          <View key={ri} style={styles.row}>
+            {row.map((cell, ci) => {
+              const isFree = cell === 'FREE' || cell === 'Free';
+              const val = isFree ? cell : (typeof cell === 'string' ? parseInt(cell) : cell);
+              const isMarked = isFree || marked.has(val);
               return (
                 <Pressable
-                  key={`${rowIndex}-${colIndex}`}
-                  style={({ pressed }) => [
-                    styles.cell,
-                    { width: cellSize, height: cellSize },
-                    isMarked && styles.markedCell,
-                    isFreeSpace && styles.freeCell,
-                    pressed && { opacity: 0.6 },
-                  ]}
-                  onPressIn={() => {
-                    if (!isFreeSpace) {
-                      markNumber(cardId, cell);
-                    }
-                  }}
-                  delayLongPress={0}
-                  android_disableSound={true}
+                  key={ci}
+                  style={[styles.cell, { width: cs, height: cs * 0.88 }, isMarked && styles.markedCell]}
+                  onPressIn={() => { if (!isFree) toggleNumber(cardId, val); }}
                 >
-                  <Text style={[
-                    styles.cellText,
-                    { fontSize: isFullWidth ? 16 : 12 },
-                    isMarked && styles.markedCellText,
-                    isFreeSpace && styles.freeCellText,
-                  ]}>
-                    {isFreeSpace ? 'F' : cell}
+                  <Text style={[styles.cellText, { fontSize: numFontSize }, isMarked && styles.markedText]}>
+                    {isFree ? 'F' : cell}
                   </Text>
                 </Pressable>
               );
@@ -258,478 +204,173 @@ export default function App() {
         ))}
       </View>
     );
-  };
+  }, [dims, displayedCards, markedNumbers]);
+
+  const { width, height, scale } = dims;
+  const btnSize = Math.max(52, Math.min(scale * 64, 72));
+  const headerPad = Math.max(10, scale * 14);
 
   return (
     <View style={styles.container}>
       <StatusBar hidden={true} />
-      
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>FB</Text>
+
+      {showSplash && (
+        <View style={styles.splashContainer}>
+          <View style={[styles.splashLogo, {
+            width: scale * 110, height: scale * 110, borderRadius: scale * 55, marginBottom: scale * 24,
+          }]}>
+            <Text style={[styles.splashLogoText, { fontSize: scale * 44 }]}>FB</Text>
           </View>
-          <Text style={styles.title}>Fidel Bingo</Text>
+          <Text style={[styles.splashTitle, { fontSize: scale * 30 }]}>Fidel Bingo</Text>
         </View>
-        <TouchableOpacity 
-          style={styles.menuButton}
-          onPressIn={() => setShowMenu(true)}
-        >
-          <Text style={styles.menuText}>⋮</Text>
-        </TouchableOpacity>
-      </View>
+      )}
 
-      <ScrollView style={styles.cardsContainer} showsVerticalScrollIndicator={false}>
-        {displayedCards.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No cards added yet</Text>
-            <Text style={styles.emptyStateSubtext}>Tap the + button to add your first card</Text>
+      {!showSplash && (
+        <>
+          <View style={[styles.header, { paddingHorizontal: headerPad, paddingVertical: Math.max(8, scale * 10) }]}>
+            <Text style={[styles.headerTitle, { fontSize: Math.max(15, scale * 18) }]}>Fidel Bingo</Text>
+            <TouchableOpacity style={styles.menuBtn} onPress={() => setShowMenu(true)}>
+              <Text style={[styles.menuBtnText, { fontSize: Math.max(18, scale * 22) }]}>⋮</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <View style={[
-            styles.cardsGrid,
-            displayedCards.length === 1 && styles.singleCardGrid
-          ]}>
-            {displayedCards.map((cardId) => {
-              return (
-                <View
-                  key={cardId}
-                  style={[
-                    styles.cardWrapper,
-                    displayedCards.length === 1 && styles.singleCardWrapper
-                  ]}
-                >
-                  {renderBingoCard(cardId)}
-                </View>
-              );
-            })}
-          </View>
-        )}
-      </ScrollView>
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => setShowAddModal(true)}
-      >
-        <Text style={styles.addButtonText}>+</Text>
-      </TouchableOpacity>
+          <ScrollView contentContainerStyle={{ paddingBottom: btnSize + 40 }}>
+            {displayedCards.length === 0 ? (
+              <View style={[styles.emptyState, { marginTop: height * 0.25 }]}>
+                <Text style={[styles.emptyText, { fontSize: scale * 20 }]}>No cartela added yet</Text>
+                <Text style={[styles.emptySubtext, { fontSize: scale * 14 }]}>Tap + to add your first cartela</Text>
+              </View>
+            ) : (
+              <View style={styles.cardsGrid}>
+                {displayedCards.map(id => renderCard(id))}
+              </View>
+            )}
+          </ScrollView>
 
-      {/* Menu Modal */}
-      <Modal
-        visible={showMenu}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowMenu(false)}
-      >
-        <TouchableOpacity 
-          style={styles.menuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMenu(false)}
-        >
-          <TouchableOpacity 
-            style={styles.cleanButtonMenu}
-            activeOpacity={0.7}
-            onPress={async () => {
-              // Clear all marked numbers and saved data
-              setMarkedNumbers({});
-              try {
-                await AsyncStorage.removeItem('bingoData');
-              } catch (error) {
-                console.log('Error clearing saved data:', error);
-              }
-              setShowMenu(false);
-            }}
+          <TouchableOpacity
+            style={[styles.addButton, { width: btnSize, height: btnSize, borderRadius: btnSize / 2, bottom: scale * 28, right: scale * 24 }]}
+            onPress={() => setShowAddModal(true)}
           >
-            <Text style={styles.cleanButtonMenuText}>Clean</Text>
+            <Text style={[styles.addButtonText, { fontSize: scale * 34, lineHeight: scale * 38 }]}>+</Text>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
-      {/* Add Card Modal */}
-      <Modal
-        visible={showAddModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowAddModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Cartela 1 - 2000"
-              value={cardRangeInput}
-              onChangeText={setCardRangeInput}
-              keyboardType="numeric"
-              autoFocus={true}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={addCardRange}
-              >
-                <Text style={styles.modalButtonText}>Add</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => {
-                  setShowAddModal(false);
-                  setCardRangeInput('');
-                }}
-              >
-                <Text style={styles.modalButtonText}>Cancel</Text>
-              </TouchableOpacity>
+          {/* Add Modal */}
+          <Modal visible={showAddModal} transparent animationType="fade" onRequestClose={() => setShowAddModal(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalContent, { width: width * 0.82, padding: scale * 22 }]}>
+                <Text style={[styles.modalTitle, { fontSize: scale * 18, marginBottom: scale * 14 }]}>Add Cartela</Text>
+                <TextInput
+                  style={[styles.modalInput, { fontSize: scale * 16, marginBottom: scale * 14, paddingVertical: scale * 11 }]}
+                  placeholder="e.g. 5 or 1-2000"
+                  value={cardInput}
+                  onChangeText={setCardInput}
+                  keyboardType="numeric"
+                  autoFocus={true}
+                  maxLength={9}
+                />
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={[styles.modalButton, { paddingVertical: scale * 13 }]} onPress={addCards}>
+                    <Text style={[styles.modalButtonText, { fontSize: scale * 15 }]}>Add</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalButton, styles.cancelButton, { paddingVertical: scale * 13 }]} onPress={() => { setShowAddModal(false); setCardInput(''); }}>
+                    <Text style={[styles.modalButtonText, { fontSize: scale * 15 }]}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </Modal>
+
+          {/* Dropdown Menu */}
+          <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
+            <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
+              <View style={[styles.menuDropdown, { top: scale * 50, right: scale * 10, minWidth: scale * 140 }]}>
+                <TouchableOpacity style={[styles.menuItem, { paddingVertical: scale * 13, paddingHorizontal: scale * 16 }]}
+                  onPress={() => { setMarkedNumbers({}); setShowMenu(false); }}>
+                  <Text style={[styles.menuItemText, { fontSize: scale * 15 }]}>🧹 Clean</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          </Modal>
+        </>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f7fa',
+  container: { flex: 1, backgroundColor: '#e8e8e8' },
+  splashContainer: { flex: 1, backgroundColor: '#1a1a2e', justifyContent: 'center', alignItems: 'center' },
+  splashLogo: {
+    backgroundColor: '#ff6b6b', justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#ff6b6b', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8,
   },
+  splashLogoText: { fontWeight: '900', color: '#fff', letterSpacing: 2 },
+  splashTitle: { fontWeight: '700', color: '#ffffff', letterSpacing: 1, textAlign: 'center' },
   header: {
-    backgroundColor: '#1a1a2e',
-    paddingTop: 15,
-    paddingBottom: 12,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 6,
+    backgroundColor: '#1a1a2e', flexDirection: 'row',
+    justifyContent: 'space-between', alignItems: 'center',
   },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  logoContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#ff6b6b',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
-    shadowColor: '#ff6b6b',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  logoText: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: 0.5,
-  },
-  title: {
-    fontSize: 19,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: 0.5,
-  },
-  menuButton: {
-    padding: 6,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-  },
-  menuText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  cardsContainer: {
-    flex: 1,
-    padding: 0,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 120,
-  },
-  emptyStateText: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: '#2d3436',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  emptyStateSubtext: {
-    fontSize: 17,
-    color: '#636e72',
-    textAlign: 'center',
-    lineHeight: 26,
-  },
-  cardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    padding: 0,
-  },
-  singleCardGrid: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 0,
-  },
-  cardWrapper: {
-    marginRight: 2,
-    marginBottom: 2,
-    position: 'relative',
-  },
-  singleCardWrapper: {
-    alignSelf: 'center',
-    margin: 0,
-  },
-  bingoCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  fullWidthCard: {
-    alignSelf: 'center',
+  headerTitle: { color: '#fff', fontWeight: '700' },
+  menuBtn: { padding: 6 },
+  menuBtnText: { color: '#fff', fontWeight: '700' },
+  emptyState: { alignItems: 'center' },
+  emptyText: { fontWeight: '700', color: '#2d3436', marginBottom: 8 },
+  emptySubtext: { color: '#636e72' },
+  cardsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 1.5, backgroundColor: '#e8e8e8' },
+  card: {
+    backgroundColor: '#fff', borderRadius: 0,
+    borderWidth: 1, borderColor: '#ff6b6b',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2,
   },
   cardHeader: {
-    backgroundColor: '#6c5ce7',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    shadowColor: '#6c5ce7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: '#1a1a2e', borderTopLeftRadius: 10, borderTopRightRadius: 10,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 8,
   },
-  cardNumber: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
-  removeButton: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 14,
-    width: 28,
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  removeButtonText: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  bingoHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#1a1a2e',
-    paddingVertical: 8,
-    marginBottom: 4,
-    borderRadius: 8,
-  },
-  bingoHeaderText: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#ffffff',
-    textAlign: 'center',
-    letterSpacing: 1,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  cell: {
-    borderWidth: 2,
-    borderColor: '#dfe6e9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    margin: 1,
-    backgroundColor: '#ffffff',
+  cardNumber: { color: '#ffd700', fontWeight: '900', flex: 1, textAlign: 'center' },
+  removeBtn: {
+    backgroundColor: '#e74c3c',
     borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  markedCell: {
-    backgroundColor: '#00b894',
-    borderColor: '#00a383',
+  removeBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  bingoRow: { flexDirection: 'row', backgroundColor: '#6c5ce7', paddingVertical: 4 },
+  bingoLetter: { textAlign: 'center', color: '#fff', fontWeight: '800' },
+  row: { flexDirection: 'row', justifyContent: 'space-around' },
+  cell: {
+    borderWidth: 1, borderColor: '#2c3e50', justifyContent: 'center',
+    alignItems: 'center', margin: 1, backgroundColor: '#2c3e50', borderRadius: 4,
   },
-  freeCell: {
-    backgroundColor: '#00b894',
-    borderColor: '#00a383',
-  },
-  cellText: {
-    fontWeight: '900',
-    color: '#2d3436',
-  },
-  markedCellText: {
-    color: '#ffffff',
-    fontWeight: '900',
-  },
-  freeCellText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '900',
-  },
+  markedCell: { backgroundColor: '#e74c3c', borderColor: '#c0392b' },
+  cellText: { fontWeight: '900', color: '#ffffff' },
+  markedText: { color: '#fff', fontWeight: '900' },
   addButton: {
-    position: 'absolute',
-    bottom: 30,
-    right: 30,
-    backgroundColor: '#1a1a2e',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#1a1a2e',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    position: 'absolute', backgroundColor: '#1a1a2e',
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 8,
   },
-  addButtonText: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: '700',
-  },
-  menuOverlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'flex-start',
-    alignItems: 'flex-end',
-    paddingTop: 10,
-    paddingRight: 50,
-    paddingLeft: 20,
-  },
-  cleanButtonMenu: {
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    backgroundColor: '#ff6b6b',
-    borderRadius: 8,
-    shadowColor: '#ff6b6b',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cleanButtonMenuText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  menuContent: {
-    backgroundColor: 'rgba(59, 130, 246, 0.95)',
-    borderRadius: 12,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-    padding: 20,
-  },
-  menuPlaceholder: {
-    fontSize: 15,
-    color: '#ffffff',
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  menuItem: {
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
-  },
-  menuItemText: {
-    fontSize: 17,
-    color: '#ffffff',
-    fontWeight: '600',
-  },
-  lastMenuItem: {
-    borderBottomWidth: 0,
-  },
-  disabledMenuItem: {
-    opacity: 0.5,
-  },
-  disabledMenuItemText: {
-    color: '#b2bec3',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  addButtonText: { color: '#ffffff', fontWeight: '700' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 28,
-    width: width - 80,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
+    backgroundColor: '#fff', borderRadius: 20, alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.25, shadowRadius: 16, elevation: 10,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginBottom: 18,
-    textAlign: 'center',
-    color: '#2d3436',
-  },
+  modalTitle: { fontWeight: '700', color: '#2d3436' },
   modalInput: {
-    borderWidth: 2,
-    borderColor: '#dfe6e9',
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    fontSize: 17,
-    width: '100%',
-    marginBottom: 24,
-    textAlign: 'center',
-    backgroundColor: '#f8f9fa',
-    fontWeight: '600',
-    color: '#2d3436',
+    borderWidth: 2, borderColor: '#dfe6e9', borderRadius: 12, paddingHorizontal: 16,
+    width: '100%', textAlign: 'center', backgroundColor: '#f8f9fa', fontWeight: '600', color: '#2d3436',
   },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    gap: 12,
+  modalButtons: { flexDirection: 'row', gap: 10, width: '100%' },
+  modalButton: { backgroundColor: '#1a1a2e', borderRadius: 12, flex: 1, alignItems: 'center' },
+  cancelButton: { backgroundColor: '#b2bec3' },
+  modalButtonText: { color: '#ffffff', fontWeight: '700' },
+  menuOverlay: { flex: 1, backgroundColor: 'transparent' },
+  menuDropdown: {
+    position: 'absolute', backgroundColor: '#1a1a2e', borderRadius: 10, elevation: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8,
   },
-  modalButton: {
-    backgroundColor: '#1a1a2e',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
-    flex: 1,
-    shadowColor: '#1a1a2e',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  modalButtonText: {
-    color: '#ffffff',
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
+  menuItem: {},
+  menuItemText: { color: '#fff', fontWeight: '600' },
 });

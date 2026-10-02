@@ -48,8 +48,14 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "d65fe08e-ec87-4269-acca-325de847c5d8"
+        "projectId": "8a3e050f-b0ac-42d8-8ce9-b3d276332649"
       }
-    }
+    },
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_ERROR_RECOVERY",
+      "fallbackToCacheTimeout": 0
+    },
+    "owner": "amourbingos-team"
   }
 }
