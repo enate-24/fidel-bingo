@@ -340,11 +340,11 @@ const styles = StyleSheet.create({
   bingoLetter: { textAlign: 'center', color: '#fff', fontWeight: '800' },
   row: { flexDirection: 'row', justifyContent: 'space-around' },
   cell: {
-    borderWidth: 1, borderColor: '#2c3e50', justifyContent: 'center',
-    alignItems: 'center', margin: 1, backgroundColor: '#2c3e50', borderRadius: 4,
+    borderWidth: 1, borderColor: '#dfe6e9', justifyContent: 'center',
+    alignItems: 'center', margin: 1, backgroundColor: '#ffffff', borderRadius: 4,
   },
   markedCell: { backgroundColor: '#e74c3c', borderColor: '#c0392b' },
-  cellText: { fontWeight: '900', color: '#ffffff' },
+  cellText: { fontWeight: '900', color: '#1a1a2e' },
   markedText: { color: '#fff', fontWeight: '900' },
   addButton: {
     position: 'absolute', backgroundColor: '#1a1a2e',
